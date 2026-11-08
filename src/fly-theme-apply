@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# fly-theme-apply — применить тему Fly (Astra Linux 1.8) к текущей сессии.
+#
+# Основной способ: fly-select-theme <id> (штатная утилита Fly, применяет тему
+# вместе с палитрой, обоями и заголовками на лету).
+# Резервный способ (если fly-select-theme нет/не сработал): запись
+# ~/.config/fly-admin-themerc + ~/.fly/paletterc и перезапуск fly-wm.
+#
+# Использование:
+#   fly-theme-apply <theme-id>     применить тему
+#   fly-theme-apply --list         показать установленные темы
+#   fly-theme-apply --status       текущая тема
+#   fly-theme-apply --dry-run <id> проверить, что тема найдена
+set -euo pipefail
+
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+THEME_DIRS=("$DATA_HOME/flythemes" "/usr/share/flythemes")
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/fly-theme-apply"
+LOG="$STATE_DIR/log"
+
+log() { mkdir -p "$STATE_DIR"; printf '[%s] %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }
+die() { echo "fly-theme-apply: $*" >&2; log "ERROR: $*"; exit 1; }
+
+usage() {
+  cat <<'EOF'
+Usage: fly-theme-apply [--list|--status|--dry-run] <theme-id>
+
+  <theme-id>      применить установленную тему Fly по её Id
+  --list          список доступных тем (Id — Name)
+  --status        показать текущую тему
+  --dry-run <id>  только проверить, что тема найдена
+  -h, --help      эта справка
+
+Темы ищутся в ~/.local/share/flythemes и /usr/share/flythemes.
+EOF
+}
+
+find_theme() {
+  local id="$1" d
+  for d in "${THEME_DIRS[@]}"; do
+    if [ -f "$d/$id/index.theme" ]; then
+      printf '%s\n' "$d/$id"
+      return 0
+    fi
+  done
+  return 1
+}
+
+current_theme() {
+  local rc="$CONFIG_HOME/fly-admin-themerc"
+  [ -f "$rc" ] || return 1
+  sed -n 's/^CurrentTheme=//p' "$rc" | head -1
+}
+
+theme_key() {
+  # $1 — themerc, $2 — ключ
+  sed -n "s/^$2=//p" "$1" | head -1 | sed 's/^"//; s/"$//'
+}
+
+list_themes() {
+  local d t id name
+  for d in "${THEME_DIRS[@]}"; do
+    [ -d "$d" ] || continue
+    for t in "$d"/*/; do
+      [ -f "${t}index.theme" ] || continue
+      id="$(sed -n 's/^Id=//p' "${t}index.theme" | head -1)"
+      name="$(sed -n 's/^Name=//p' "${t}index.theme" | head -1)"
+      [ -n "$id" ] || continue
+      printf '%-22s %s\n' "$id" "$name"
+    done
+  done | sort -u
+}
+
+ensure_compositor() {
+  local pid bin
+  if pgrep -x picom >/dev/null 2>&1 || pgrep -x compton >/dev/null 2>&1; then
+    pid="$(pgrep -x picom 2>/dev/null || pgrep -x compton 2>/dev/null || true)"
+  else
+    bin=""
+    for b in /usr/bin/compton /usr/bin/picom; do
+      [ -x "$b" ] && { bin="$b"; break; }
+    done
+    [ -n "$bin" ] || return 0
+    setsid "$bin" -b >/dev/null 2>&1 &
+    sleep 1.5
+    pid="$(pgrep -x picom 2>/dev/null || pgrep -x compton 2>/dev/null || true)"
+  fi
+  if [ -n "$pid" ] && command -v xprop >/dev/null 2>&1; then
+    xprop -root -f _FLY_COMPOSITOR_PID 32c -set _FLY_COMPOSITOR_PID "$pid" 2>/dev/null || true
+  fi
+}
+
+apply_via_select() {
+  command -v fly-select-theme >/dev/null 2>&1 || return 1
+  local out
+  if ! out="$(fly-select-theme "$1" 2>&1)"; then
+    log "fly-select-theme failed: $out"
+    return 1
+  fi
+  sleep 0.5
+  if [ "$(current_theme || true)" = "$1" ]; then
+    return 0
+  fi
+  log "fly-select-theme did not switch theme: $out"
+  return 1
+}
+
+write_palette() {
+  # $1 — цветовая схема, $2 — PrimaryColor, $3 — BackgroundColor
+  python3 - "$HOME/.fly/paletterc" "$1" "$2" "$3" <<'PY'
+import sys
+path, scheme, primary, bg = sys.argv[1:5]
+try:
+    lines = open(path, encoding='utf-8').read().splitlines()
+except FileNotFoundError:
+    lines = []
+kv = {'ColorScheme': '"%s"' % scheme}
+if primary:
+    kv['PrimaryColor'] = primary
+if bg:
+    kv['BackgroundColor'] = bg
+out, seen = [], set()
+for line in lines:
+    s = line.strip()
+    key = s.split('=', 1)[0].strip() if ('=' in s and not s.startswith(';')) else ''
+    if key in kv:
+        out.append('%s=%s' % (key, kv[key]))
+        seen.add(key)
+    else:
+        out.append(line)
+if '[Variables]' not in [l.strip() for l in out]:
+    out.insert(0, '[Variables]')
+for k, v in kv.items():
+    if k not in seen:
+        out.append('%s=%s' % (k, v))
+open(path, 'w', encoding='utf-8').write('\n'.join(out) + '\n')
+PY
+}
+
+fallback_apply() {
+  local id="$1" dir="$2" themerc scheme primary bg rc
+  themerc="$dir/theme/themerc"
+  [ -f "$themerc" ] || die "нет файла $themerc"
+  scheme="$(theme_key "$themerc" ColorScheme)"
+  primary="$(theme_key "$themerc" PrimaryColor)"
+  bg="$(theme_key "$themerc" BackgroundColor)"
+  if [ -z "$scheme" ]; then
+    die "в $themerc не задан ColorScheme (битая тема)"
+  fi
+  rc="$CONFIG_HOME/fly-admin-themerc"
+  mkdir -p "$CONFIG_HOME"
+  cat >"$rc" <<EOF
+[Theme]
+CurrentTheme=$id
+CurrentThemePath=$dir/index.theme
+EOF
+  write_palette "$scheme" "$primary" "$bg"
+  command -v fly-wmfunc >/dev/null 2>&1 || die "нет fly-wmfunc (это не сессия Fly?)"
+  echo "Перезапуск fly-wm для применения темы..." >&2
+  fly-wmfunc FLYWM_RESTART >/dev/null 2>&1 || true
+  sleep 6
+  ensure_compositor
+  [ "$(current_theme || true)" = "$id" ] || die "тема $id не применилась"
+}
+
+MODE=apply
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  --list) list_themes; exit 0 ;;
+  --status) current_theme || die "текущая тема не определена"; exit 0 ;;
+  --dry-run) MODE=dry; shift ;;
+  '') usage >&2; exit 2 ;;
+esac
+
+ID="${1:-}"
+[ -n "$ID" ] || { usage >&2; exit 2; }
+DIR="$(find_theme "$ID")" || die "тема не найдена: $ID (fly-theme-apply --list)"
+
+if [ "$MODE" = dry ]; then
+  echo "Тема найдена: $ID ($DIR)"
+  exit 0
+fi
+
+if [ "$(current_theme || true)" = "$ID" ]; then
+  echo "Тема уже активна: $ID"
+  exit 0
+fi
+
+if apply_via_select "$ID"; then
+  log "applied $ID via fly-select-theme"
+  echo "Тема применена: $ID"
+  exit 0
+fi
+
+echo "fly-select-theme недоступен/не сработал — применяю через перезапуск fly-wm" >&2
+fallback_apply "$ID" "$DIR"
+log "applied $ID via fallback"
+echo "Тема применена (fallback): $ID"

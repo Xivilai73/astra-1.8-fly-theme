@@ -1,0 +1,346 @@
+#!/usr/bin/env bash
+# fly-theme-switch — автосмена темы Fly по времени суток (Astra Linux 1.8).
+#
+# День:  [DAY_START, NIGHT_START) -> DAY_THEME   (по умолчанию AstraProximaLight)
+# Ночь:  остальное время          -> NIGHT_THEME (по умолчанию Astra18FlyDark)
+#
+# Использование:
+#   fly-theme-switch --daemon          демон (автозапуск при входе в сеанс)
+#   fly-theme-switch --once            один тик: сменить тему, если фаза сменилась
+#   fly-theme-switch --apply day|night|auto|<id>  применить тему вручную
+#   fly-theme-switch --status          показать конфиг, фазу и текущую тему
+#   fly-theme-switch --config PATH ... использовать другой конфиг
+set -euo pipefail
+
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+STATE_DIR="$STATE_HOME/fly-theme-switch"
+LOCK="$STATE_DIR/lock"
+PIDFILE="$STATE_DIR/pid"
+LOG="$STATE_DIR/log"
+STATE="$STATE_DIR/state"
+
+DEFAULT_DAY_START=08:00
+DEFAULT_NIGHT_START=20:00
+DEFAULT_DAY_THEME=AstraProximaLight
+DEFAULT_NIGHT_THEME=Astra18FlyDark
+DEFAULT_INTERVAL=60
+
+CONFIG=""
+DAY_START="$DEFAULT_DAY_START"
+NIGHT_START="$DEFAULT_NIGHT_START"
+DAY_THEME="$DEFAULT_DAY_THEME"
+NIGHT_THEME="$DEFAULT_NIGHT_THEME"
+CHECK_INTERVAL="$DEFAULT_INTERVAL"
+CONFIG_FILE=""
+
+log() { mkdir -p "$STATE_DIR"; printf '[%s] %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }
+warn() { echo "fly-theme-switch: $*" >&2; log "WARN: $*"; }
+die() { echo "fly-theme-switch: $*" >&2; log "ERROR: $*"; exit 1; }
+
+usage() {
+  cat <<'EOF'
+Usage: fly-theme-switch [--config PATH] <команда>
+
+  --daemon                 запустить демон автосмены
+  --once                   один тик (сменить тему, если фаза сменилась)
+  --apply day|night|auto|<id>  применить тему вручную
+  --status                 конфиг, текущая фаза и тема
+  -h, --help               эта справка
+
+Конфиг: ~/.config/fly-theme-switch.conf (или /etc/xdg/fly-theme-switch.conf).
+EOF
+}
+
+find_config() {
+  local p
+  if [ -n "$CONFIG" ]; then
+    printf '%s\n' "$CONFIG"
+    return 0
+  fi
+  for p in "$CONFIG_HOME/fly-theme-switch.conf" \
+           "${XDG_CONFIG_DIRS:-/etc/xdg}/fly-theme-switch.conf" \
+           "/etc/fly-theme-switch.conf"; do
+    if [ -f "$p" ]; then
+      printf '%s\n' "$p"
+      return 0
+    fi
+  done
+  return 0
+}
+
+is_time() {
+  [[ "$1" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]
+}
+
+validate_config() {
+  local changed=0
+  if ! is_time "$DAY_START" || ! is_time "$NIGHT_START"; then
+    warn "некорректное время в конфиге (нужно ЧЧ:ММ), беру $DEFAULT_DAY_START/$DEFAULT_NIGHT_START"
+    DAY_START="$DEFAULT_DAY_START"
+    NIGHT_START="$DEFAULT_NIGHT_START"
+    changed=1
+  fi
+  if [ "$DAY_START" = "$NIGHT_START" ]; then
+    warn "DAY_START = NIGHT_START, беру $DEFAULT_DAY_START/$DEFAULT_NIGHT_START"
+    DAY_START="$DEFAULT_DAY_START"
+    NIGHT_START="$DEFAULT_NIGHT_START"
+    changed=1
+  fi
+  if ! [[ "$CHECK_INTERVAL" =~ ^[0-9]+$ ]] || [ "$CHECK_INTERVAL" -lt 10 ]; then
+    warn "CHECK_INTERVAL некорректен, беру $DEFAULT_INTERVAL"
+    CHECK_INTERVAL="$DEFAULT_INTERVAL"
+    changed=1
+  fi
+  if [ "$changed" = 1 ]; then
+    log "конфиг исправлен на значения по умолчанию"
+  fi
+}
+
+load_config() {
+  CONFIG_FILE="$(find_config)"
+  DAY_START="$DEFAULT_DAY_START"
+  NIGHT_START="$DEFAULT_NIGHT_START"
+  DAY_THEME="$DEFAULT_DAY_THEME"
+  NIGHT_THEME="$DEFAULT_NIGHT_THEME"
+  CHECK_INTERVAL="$DEFAULT_INTERVAL"
+  if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+    [ -r "$CONFIG_FILE" ] || die "нет доступа к конфигу: $CONFIG_FILE"
+    local line key value
+    while IFS= read -r line; do
+      case "$line" in
+        ''|'#'*) continue ;;
+      esac
+      key="${line%%=*}"
+      value="${line#*=}"
+      key="$(printf '%s' "$key" | tr -d '[:space:]')"
+      value="$(printf '%s' "$value" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/^"//; s/"$//')"
+      case "$key" in
+        DAY_START) DAY_START="$value" ;;
+        NIGHT_START) NIGHT_START="$value" ;;
+        DAY_THEME) DAY_THEME="$value" ;;
+        NIGHT_THEME) NIGHT_THEME="$value" ;;
+        CHECK_INTERVAL) CHECK_INTERVAL="$value" ;;
+      esac
+    done < <(grep -v '^[[:space:]]*#' "$CONFIG_FILE" 2>/dev/null || true)
+  fi
+  validate_config
+}
+
+time_min() {
+  # "ЧЧ:ММ" -> минуты
+  local h="${1%%:*}" m="${1#*:}"
+  echo $((10#$h * 60 + 10#$m))
+}
+
+phase_now() {
+  local now day night
+  now="$(time_min "$(date +%H:%M)")"
+  day="$(time_min "$DAY_START")"
+  night="$(time_min "$NIGHT_START")"
+  if [ "$day" -lt "$night" ]; then
+    if [ "$now" -ge "$day" ] && [ "$now" -lt "$night" ]; then
+      echo day
+    else
+      echo night
+    fi
+  else
+    # интервал через полночь: день [DAY_START..24:00) + [00:00..NIGHT_START)
+    if [ "$now" -ge "$day" ] || [ "$now" -lt "$night" ]; then
+      echo day
+    else
+      echo night
+    fi
+  fi
+}
+
+theme_for_phase() {
+  case "$1" in
+    day) echo "$DAY_THEME" ;;
+    night) echo "$NIGHT_THEME" ;;
+    *) return 1 ;;
+  esac
+}
+
+current_theme() {
+  local rc="$CONFIG_HOME/fly-admin-themerc"
+  [ -f "$rc" ] || return 1
+  sed -n 's/^CurrentTheme=//p' "$rc" | head -1
+}
+
+state_get() {
+  [ -f "$STATE" ] || return 0
+  sed -n "s/^$1=//p" "$STATE" | head -1
+}
+
+state_write() {
+  mkdir -p "$STATE_DIR"
+  printf 'phase=%s\napplied_theme=%s\nts=%s\n' \
+    "$1" "${2:-}" "$(date '+%F %T')" >"$STATE"
+}
+
+find_apply() {
+  local p
+  if [ -n "${FLY_THEME_APPLY:-}" ] && [ -x "$FLY_THEME_APPLY" ]; then
+    printf '%s\n' "$FLY_THEME_APPLY"
+    return 0
+  fi
+  p="$(command -v fly-theme-apply 2>/dev/null || true)"
+  if [ -n "$p" ]; then
+    printf '%s\n' "$p"
+    return 0
+  fi
+  p="$(cd "$(dirname "$0")" && pwd)/fly-theme-apply"
+  if [ -x "$p" ]; then
+    printf '%s\n' "$p"
+    return 0
+  fi
+  return 1
+}
+
+apply_theme() {
+  local id="$1" app
+  app="$(find_apply)" || { log "ERROR: fly-theme-apply не найден"; return 1; }
+  "$app" "$id" >>"$LOG" 2>&1
+}
+
+tick() {
+  local phase desired current last_phase
+  phase="$(phase_now)"
+  desired="$(theme_for_phase "$phase")"
+  current="$(current_theme || true)"
+  last_phase="$(state_get phase || true)"
+
+  if [ -z "$last_phase" ]; then
+    if [ "$current" != "$desired" ]; then
+      log "start: фаза $phase, тема '$current' -> '$desired'"
+      if apply_theme "$desired"; then
+        state_write "$phase" "$desired"
+        log "ok: тема $desired"
+      else
+        log "FAIL: не удалось применить $desired"
+        return 1
+      fi
+    else
+      state_write "$phase" "$current"
+      log "start: фаза $phase, тема уже $current"
+    fi
+    return 0
+  fi
+
+  if [ "$last_phase" != "$phase" ]; then
+    log "смена фазы $last_phase -> $phase, тема '$current' -> '$desired'"
+    if apply_theme "$desired"; then
+      state_write "$phase" "$desired"
+      log "ok: тема $desired"
+    else
+      log "FAIL: не удалось применить $desired (повтор на следующем тике)"
+      return 1
+    fi
+  fi
+  return 0
+}
+
+daemon_run() {
+  mkdir -p "$STATE_DIR"
+  exec 9>"$LOCK"
+  if ! flock -n 9; then
+    echo "fly-theme-switch: уже запущен" >&2
+    exit 0
+  fi
+  echo $$ >"$PIDFILE"
+  load_config
+  trap 'log "daemon остановлен (pid $$)"; rm -f "$PIDFILE"; exit 0' TERM INT
+  log "daemon запущен (pid $$, конфиг: ${CONFIG_FILE:-значения по умолчанию})"
+  tick || true
+  while :; do
+    sleep "$CHECK_INTERVAL" &
+    SLEEP_PID=$!
+    wait "$SLEEP_PID" 2>/dev/null || true
+    tick || true
+  done
+}
+
+status_print() {
+  load_config
+  local phase current desired pid running="нет"
+  phase="$(phase_now)"
+  current="$(current_theme || echo '(не определена)')"
+  desired="$(theme_for_phase "$phase")"
+  if [ -f "$PIDFILE" ]; then
+    pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      running="да (pid $pid)"
+    fi
+  fi
+  echo "Конфиг:        ${CONFIG_FILE:-значения по умолчанию}"
+  echo "День:          $DAY_START -> $DAY_THEME"
+  echo "Ночь:          $NIGHT_START -> $NIGHT_THEME"
+  echo "Интервал:      ${CHECK_INTERVAL} с"
+  echo "Сейчас:        $(date '+%F %T'), фаза $phase, нужна тема $desired"
+  echo "Текущая тема:  $current"
+  echo "Демон:         $running"
+  if [ -f "$LOG" ]; then
+    echo "Последние записи лога:"
+    tail -n 3 "$LOG" | sed 's/^/  /'
+  fi
+}
+
+onetime() {
+  load_config
+  echo "Фаза: $(phase_now), тема: $(theme_for_phase "$(phase_now)")"
+  tick
+}
+
+manual_apply() {
+  local arg="$1" id phase
+  load_config
+  case "$arg" in
+    auto) phase="$(phase_now)"; id="$(theme_for_phase "$phase")" ;;
+    day) id="$DAY_THEME" ;;
+    night) id="$NIGHT_THEME" ;;
+    *) id="$arg" ;;
+  esac
+  echo "Применяю тему: $id"
+  if apply_theme "$id"; then
+    state_write "$(phase_now)" "$id"
+    log "manual apply: $id"
+    echo "Готово."
+  else
+    die "не удалось применить тему $id"
+  fi
+}
+
+# --- разбор аргументов ---
+ACTION=""
+APPLY_ARG=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --daemon) ACTION=daemon ;;
+    --once) ACTION=once ;;
+    --status) ACTION=status ;;
+    --apply)
+      shift
+      [ $# -gt 0 ] || die "--apply требует значение"
+      APPLY_ARG="$1"
+      ACTION=apply
+      ;;
+    --config)
+      shift
+      [ $# -gt 0 ] || die "--config требует путь"
+      CONFIG="$1"
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+case "$ACTION" in
+  daemon) daemon_run ;;
+  once) onetime ;;
+  status) status_print ;;
+  apply) manual_apply "$APPLY_ARG" ;;
+  '') usage >&2; exit 2 ;;
+  *) die "неизвестное действие: $ACTION" ;;
+esac

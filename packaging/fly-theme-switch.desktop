@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Fly Theme Switcher (Astra 1.8)
+Name[ru]=Автосмена темы Fly (Astra 1.8)
+Comment=Automatic day/night theme switch for Fly
+Comment[ru]=Автоматическая смена темы Fly по времени суток (день/ночь)
+Exec=/usr/bin/fly-theme-switch --daemon
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
