@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fly-theme-switch — автосмена темы Fly по времени суток (Astra Linux 1.8).
 #
-# День:  [DAY_START, NIGHT_START) -> DAY_THEME   (по умолчанию AstraProximaLight)
+# День:  [DAY_START, NIGHT_START) -> DAY_THEME   (по умолчанию Astra18FlyLight)
 # Ночь:  остальное время          -> NIGHT_THEME (по умолчанию Astra18FlyDark)
 #
 # Использование:
@@ -22,7 +22,7 @@ STATE="$STATE_DIR/state"
 
 DEFAULT_DAY_START=08:00
 DEFAULT_NIGHT_START=20:00
-DEFAULT_DAY_THEME=AstraProximaLight
+DEFAULT_DAY_THEME=Astra18FlyLight
 DEFAULT_NIGHT_THEME=Astra18FlyDark
 DEFAULT_INTERVAL=60
 

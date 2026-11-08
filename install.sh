@@ -11,9 +11,7 @@ STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 BIN_DIR="$HOME/.local/bin"
 AUTOSTART_DIR="$CONFIG_HOME/autostart"
 
-THEME_ID="Astra18FlyDark"
-THEME_DIR="$DATA_HOME/flythemes/$THEME_ID"
-SCHEME_FILE="$DATA_HOME/color-schemes/$THEME_ID.colors"
+THEMES="Astra18FlyDark Astra18FlyLight"
 CONFIG_FILE="$CONFIG_HOME/fly-theme-switch.conf"
 SWITCH="$BIN_DIR/fly-theme-switch"
 PIDFILE="$STATE_HOME/fly-theme-switch/pid"
@@ -47,23 +45,25 @@ for c in fly-select-theme fly-wmfunc fly-wm; do
   command -v "$c" >/dev/null 2>&1 || warn "не найдена команда $c — проверьте, что это сессия Fly"
 done
 
-info "Установка темы $THEME_ID ..."
+info "Установка тем: $THEMES ..."
 install -d "$DATA_HOME/flythemes" "$DATA_HOME/color-schemes" \
           "$BIN_DIR" "$AUTOSTART_DIR" "$BACKUP_DIR"
 
-# --- тема ---
-rm -rf "$THEME_DIR"
-cp -a "$HERE/src/themes/$THEME_ID" "$THEME_DIR"
-python3 - "$THEME_DIR/theme/themerc" "$SCHEME_FILE" <<'PY'
+# --- темы и цветовые схемы ---
+for theme_id in $THEMES; do
+  theme_dir="$DATA_HOME/flythemes/$theme_id"
+  scheme_file="$DATA_HOME/color-schemes/$theme_id.colors"
+  rm -rf "$theme_dir"
+  cp -a "$HERE/src/themes/$theme_id" "$theme_dir"
+  python3 - "$theme_dir/theme/themerc" "$scheme_file" <<'PY'
 import sys
 path, scheme = sys.argv[1:3]
 text = open(path, encoding='utf-8').read()
 text = text.replace('@SCHEME_PATH@', scheme)
 open(path, 'w', encoding='utf-8').write(text)
 PY
-
-# --- цветовая схема ---
-install -m 644 "$HERE/src/colors/$THEME_ID.colors" "$SCHEME_FILE"
+  install -m 644 "$HERE/src/colors/$theme_id.colors" "$scheme_file"
+done
 
 # --- скрипты ---
 install -m 755 "$HERE/src/fly-theme-apply" "$APPLY"
@@ -111,8 +111,8 @@ fi
 
 cat <<EOF
 Готово.
-  Тема:        $THEME_DIR
-  Схема:       $SCHEME_FILE
+  Темы:        $DATA_HOME/flythemes/{Astra18FlyDark,Astra18FlyLight}
+  Схемы:       $DATA_HOME/color-schemes/{Astra18FlyDark,Astra18FlyLight}.colors
   Скрипты:     $APPLY, $SWITCH
   Конфиг:      $CONFIG_FILE
   Автозапуск:  $AUTOSTART_DIR/fly-theme-switch.desktop

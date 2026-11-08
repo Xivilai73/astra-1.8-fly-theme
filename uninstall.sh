@@ -11,9 +11,7 @@ STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 BIN_DIR="$HOME/.local/bin"
 AUTOSTART_DIR="$CONFIG_HOME/autostart"
 
-THEME_ID="Astra18FlyDark"
-THEME_DIR="$DATA_HOME/flythemes/$THEME_ID"
-SCHEME_FILE="$DATA_HOME/color-schemes/$THEME_ID.colors"
+THEMES="Astra18FlyDark Astra18FlyLight"
 CONFIG_FILE="$CONFIG_HOME/fly-theme-switch.conf"
 SWITCH="$BIN_DIR/fly-theme-switch"
 PIDFILE="$STATE_HOME/fly-theme-switch/pid"
@@ -43,9 +41,12 @@ warn() { printf 'ПРЕДУПРЕЖДЕНИЕ: %s\n' "$*" >&2; }
 
 stop_daemon
 
-info "Удаление темы и скриптов..."
-rm -rf "$THEME_DIR"
-rm -f "$SCHEME_FILE" "$SWITCH" "$APPLY" \
+info "Удаление тем и скриптов..."
+for theme_id in $THEMES; do
+  rm -rf "$DATA_HOME/flythemes/$theme_id"
+  rm -f "$DATA_HOME/color-schemes/$theme_id.colors"
+done
+rm -f "$SWITCH" "$APPLY" \
       "$AUTOSTART_DIR/fly-theme-switch.desktop" \
       "$CONFIG_FILE"
 

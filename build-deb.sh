@@ -6,31 +6,32 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG="astra-1.8-fly-theme"
 VER="1.0.0-1"
 ARCH="all"
-THEME_ID="Astra18FlyDark"
+THEMES="Astra18FlyDark Astra18FlyLight"
 OUT="$HERE/dist"
 BUILD="$OUT/build"
 ROOT="$BUILD/root"
-SCHEME_DST="/usr/share/color-schemes/$THEME_ID.colors"
+SCHEME_DST_BASE="/usr/share/color-schemes"
 
 rm -rf "$BUILD"
 install -d "$ROOT/DEBIAN" \
-           "$ROOT/usr/share/flythemes/$THEME_ID/theme" \
+           "$ROOT/usr/share/flythemes" \
            "$ROOT/usr/share/color-schemes" \
            "$ROOT/usr/bin" \
            "$ROOT/etc/xdg/autostart" \
            "$ROOT/usr/share/doc/$PKG"
 
-# тема
-cp -a "$HERE/src/themes/$THEME_ID/." "$ROOT/usr/share/flythemes/$THEME_ID/"
-python3 - "$ROOT/usr/share/flythemes/$THEME_ID/theme/themerc" "$SCHEME_DST" <<'PY'
+# темы и цветовые схемы
+for theme_id in $THEMES; do
+  scheme_dst="$SCHEME_DST_BASE/$theme_id.colors"
+  cp -a "$HERE/src/themes/$theme_id/." "$ROOT/usr/share/flythemes/$theme_id/"
+  python3 - "$ROOT/usr/share/flythemes/$theme_id/theme/themerc" "$scheme_dst" <<'PY'
 import sys
 path, scheme = sys.argv[1:3]
 text = open(path, encoding='utf-8').read().replace('@SCHEME_PATH@', scheme)
 open(path, 'w', encoding='utf-8').write(text)
 PY
-
-# цветовая схема
-install -m 644 "$HERE/src/colors/$THEME_ID.colors" "$ROOT$SCHEME_DST"
+  install -m 644 "$HERE/src/colors/$theme_id.colors" "$ROOT$scheme_dst"
+done
 
 # скрипты
 install -m 755 "$HERE/src/fly-theme-apply" "$ROOT/usr/bin/fly-theme-apply"

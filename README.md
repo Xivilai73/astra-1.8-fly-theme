@@ -1,8 +1,14 @@
 # Тема Fly «Astra 1.8 Fly Dark» + автосмена день/ночь
 
 Тёмная тема оформления **Fly** для **Astra Linux 1.8** (Special Edition / Common
-Edition, X11) и автоматическая смена темы по времени суток: днём — штатная
-светлая «Astra Proxima Светлая», ночью — эта тёмная тема.
+Edition, X11) и автоматическая смена темы по времени суток: днём — светлая
+версия этой темы (светлые панель, меню и обои, но те же тёмные рамки окон),
+ночью — тёмная тема.
+
+Обе темы используют одинаковое оформление рамок окон (`#262626`, без толстой
+рамки). Это важно: если днём переключаться на штатную светлую тему с голубыми
+рамками, Fly может оставить у верха окна светлую 1 px кромку от прежней темы
+до перезапуска `fly-wm`.
 
 Тема повторяет оформление рабочего стола, собранное при настройке Astra:
 заголовок и кромки окон в тон окну (`#262626`), без цветной окантовки; толстая
@@ -11,15 +17,17 @@ Edition, X11) и автоматическая смена темы по врем�
 
 ## Скриншоты
 
-| День (`AstraProximaLight`) | Ночь (`Astra18FlyDark`) |
+| День (`Astra18FlyLight`) | Ночь (`Astra18FlyDark`) |
 |---|---|
 | ![День](docs/screenshots/day.png) | ![Ночь](docs/screenshots/night.png) |
 
 ## Состав
 
-- тёмная тема Fly `Astra18FlyDark` (Id темы, `index.theme` + `theme/themerc`);
-- пользовательская цветовая схема `Astra18FlyDark.colors`
-  (тёмные цвета `[WM]`: заголовок/рамки `38,38,38`, без синих линий);
+- тёмная тема Fly `Astra18FlyDark` и светлая `Astra18FlyLight`
+  (Id темы, `index.theme` + `theme/themerc`); у обеих — тёмные (без синих
+  линий) рамки окон;
+- пользовательские цветовые схемы `Astra18FlyDark.colors` и
+  `Astra18FlyLight.colors` (в `[WM]`: заголовок/рамки `38,38,38`);
 - `fly-theme-apply` — применить тему по Id;
 - `fly-theme-switch` — демон автосмены день/ночь и CLI;
 - установка в профиль (`install.sh` / `uninstall.sh`) и сборка `.deb`.
@@ -30,7 +38,8 @@ Edition, X11) и автоматическая смена темы по врем�
 - пакет `fly-admin-theme` (`fly-select-theme`, `fly-wmfunc`, `fly-admin-theme`);
 - `python3`, `bash`;
 - композитор: в Astra Linux Fly используется `compton` (пакет `picom`);
-- светлая тема `AstraProximaLight` (штатная) — для дневного режима.
+- светлая тема входит в комплект (`Astra18FlyLight`), штатная
+  `AstraProximaLight` не требуется.
 
 ## Установка в профиль пользователя (без root)
 
@@ -42,8 +51,9 @@ cd astra-1.8-fly-theme
 
 Скрипт:
 
-1. копирует тему в `~/.local/share/flythemes/Astra18FlyDark`;
-2. копирует схему в `~/.local/share/color-schemes/Astra18FlyDark.colors`;
+1. копирует темы в `~/.local/share/flythemes/Astra18FlyDark` и
+   `~/.local/share/flythemes/Astra18FlyLight`;
+2. копирует схемы в `~/.local/share/color-schemes/` (обе);
 3. ставит `~/.local/bin/fly-theme-apply` и `~/.local/bin/fly-theme-switch`;
 4. создаёт конфиг `~/.config/fly-theme-switch.conf` (если его ещё нет);
 5. добавляет автозапуск `~/.config/autostart/fly-theme-switch.desktop`;
@@ -76,7 +86,7 @@ sudo apt-get -f install
 ```ini
 DAY_START=08:00
 NIGHT_START=20:00
-DAY_THEME=AstraProximaLight
+DAY_THEME=Astra18FlyLight
 NIGHT_THEME=Astra18FlyDark
 CHECK_INTERVAL=60
 ```
@@ -84,6 +94,8 @@ CHECK_INTERVAL=60
 - `DAY_START..NIGHT_START` — день; если `DAY_START > NIGHT_START`, интервал
   считается переходящим через полночь;
 - `DAY_THEME` / `NIGHT_THEME` — Id тем Fly (см. `fly-theme-apply --list`);
+  можно указать штатную `AstraProximaLight`, но тогда при смене на тёмную тему
+  возможна светлая 1 px кромка у окна до перезапуска `fly-wm`;
 - проверка — раз в `CHECK_INTERVAL` секунд.
 
 Демон запускается автоматически при входе в сеанс (автозапуск `.desktop`).
@@ -108,15 +120,15 @@ fly-theme-switch --daemon                 # запустить демон вру
 ```sh
 fly-theme-apply --list
 fly-theme-apply Astra18FlyDark
-fly-theme-apply AstraProximaLight
+fly-theme-apply Astra18FlyLight
 ```
 
 `fly-theme-apply` использует штатную утилиту Fly `fly-select-theme`: цвета,
-панель задач, меню и заголовки окон применяются на лету. Обои из темы Fly
-применяет при входе в сеанс, на лету фон не перерисовывается (см.
-«Ограничения»). Если `fly-select-theme` недоступна, используется резервный
-способ: запись `~/.config/fly-admin-themerc` и `~/.fly/paletterc` плюс
-перезапуск `fly-wm`.
+панель задач, меню, заголовки окон и обои применяются на лету. Так как обе
+темы используют одинаковые тёмные рамки окон, переключение не оставляет
+светлых «кромок» от прежней темы. Если `fly-select-theme` недоступна,
+используется резервный способ: запись `~/.config/fly-admin-themerc` и
+`~/.fly/paletterc` плюс перезапуск `fly-wm`.
 
 ## Как это работает
 
@@ -138,11 +150,12 @@ fly-theme-apply AstraProximaLight
   `FrameBorderWidth=5` и переключите тему заново.
 - Смена темы через Fly кратковременно перезапускает панель задач/меню
   (несколько секунд); открытые окна не закрываются.
-- Обои берутся из темы при входе в сеанс; при переключении темы в течение
-  сеанса фон не меняется (Fly кэширует обои). Цвета, панель и заголовки окон
-  переключаются сразу.
-- Если светлая тема `AstraProximaLight` отсутствует, днём останется тёмная
-  тема — предупреждение попадёт в журнал.
+- Если выбрать днём штатную `AstraProximaLight` (голубые рамки окон), при
+  переключении на тёмную тему Fly может оставить светлую 1 px кромку у верха
+  окна до перезапуска `fly-wm` (`fly-wmfunc FLYWM_RESTART`). Поэтому в
+  комплекте — светлая тема `Astra18FlyLight` с такими же тёмными рамками.
+- Если нужная тема не установлена, переключение не произойдёт — запись об
+  ошибке попадёт в журнал, останется текущая тема.
 - Ручные изменения оформления через «Параметры» будут перезаписаны при
   следующей автосмене — для своих постоянных настроек правьте тему/конфиг.
 
@@ -169,8 +182,10 @@ astra-1.8-fly-theme/
 │   ├── control
 │   └── fly-theme-switch.desktop
 ├── src/
-│   ├── themes/Astra18FlyDark/ # index.theme + theme/themerc
+│   ├── themes/Astra18FlyDark/   # index.theme + theme/themerc
+│   ├── themes/Astra18FlyLight/  # index.theme + theme/themerc
 │   ├── colors/Astra18FlyDark.colors
+│   ├── colors/Astra18FlyLight.colors
 │   ├── fly-theme-apply
 │   ├── fly-theme-switch
 │   └── fly-theme-switch.conf
