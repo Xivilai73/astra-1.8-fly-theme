@@ -15,7 +15,7 @@ set -euo pipefail
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 STATE_DIR="$STATE_HOME/fly-theme-switch"
-LOCK="$STATE_DIR/lock"
+LOCKDIR="$STATE_DIR/lock.d"
 PIDFILE="$STATE_DIR/pid"
 LOG="$STATE_DIR/log"
 STATE="$STATE_DIR/state"
@@ -243,14 +243,22 @@ tick() {
 
 daemon_run() {
   mkdir -p "$STATE_DIR"
-  exec 9>"$LOCK"
-  if ! flock -n 9; then
-    echo "fly-theme-switch: уже запущен" >&2
-    exit 0
+  # блокировка каталогом: не наследуется дочерними процессами (в отличие от flock fd)
+  if ! mkdir "$LOCKDIR" 2>/dev/null; then
+    oldpid="$(cat "$PIDFILE" 2>/dev/null || true)"
+    if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null; then
+      echo "fly-theme-switch: уже запущен (pid $oldpid)" >&2
+      exit 0
+    fi
+    rmdir "$LOCKDIR" 2>/dev/null || true
+    if ! mkdir "$LOCKDIR" 2>/dev/null; then
+      echo "fly-theme-switch: уже запущен" >&2
+      exit 0
+    fi
   fi
   echo $$ >"$PIDFILE"
   load_config
-  trap 'log "daemon остановлен (pid $$)"; rm -f "$PIDFILE"; exit 0' TERM INT
+  trap 'log "daemon остановлен (pid $$)"; rm -f "$PIDFILE"; rmdir "$LOCKDIR" 2>/dev/null; exit 0' TERM INT
   log "daemon запущен (pid $$, конфиг: ${CONFIG_FILE:-значения по умолчанию})"
   tick || true
   while :; do

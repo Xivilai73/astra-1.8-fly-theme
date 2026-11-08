@@ -95,8 +95,16 @@ fi
 if [ -n "${DISPLAY:-}" ]; then
   "$SWITCH" --apply auto || warn "не удалось применить тему автоматически"
   stop_daemon
-  setsid nohup "$SWITCH" --daemon >/dev/null 2>&1 &
-  sleep 1.5
+  started=0
+  for _ in 1 2 3 4 5; do
+    setsid nohup "$SWITCH" --daemon >/dev/null 2>&1 &
+    sleep 1.5
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
+      started=1
+      break
+    fi
+  done
+  [ "$started" = 1 ] || warn "демон автосмены не запустился (см. ~/.local/state/fly-theme-switch/log)"
 else
   warn "нет DISPLAY — тема применится при входе в сеанс"
 fi
