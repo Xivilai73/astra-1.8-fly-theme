@@ -11,6 +11,8 @@
 #   fly-theme-apply --list         показать установленные темы
 #   fly-theme-apply --status       текущая тема
 #   fly-theme-apply --dry-run <id> проверить, что тема найдена
+#   fly-theme-apply --no-restart <id>  без перезапуска fly-wm (если нужно
+#                                      применить только цвета)
 set -euo pipefail
 
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -24,13 +26,15 @@ die() { echo "fly-theme-apply: $*" >&2; log "ERROR: $*"; exit 1; }
 
 usage() {
   cat <<'EOF'
-Usage: fly-theme-apply [--list|--status|--dry-run] <theme-id>
+Usage: fly-theme-apply [--list|--status|--dry-run|--no-restart] <theme-id>
 
-  <theme-id>      применить установленную тему Fly по её Id
-  --list          список доступных тем (Id — Name)
-  --status        показать текущую тему
-  --dry-run <id>  только проверить, что тема найдена
-  -h, --help      эта справка
+  <theme-id>        применить установленную тему Fly по её Id
+  --list            список доступных тем (Id — Name)
+  --status          показать текущую тему
+  --dry-run <id>    только проверить, что тема найдена
+  --no-restart <id> применить без перезапуска fly-wm (цвета/панель; кромки
+                    окон могут остаться от прежней темы)
+  -h, --help        эта справка
 
 Темы ищутся в ~/.local/share/flythemes и /usr/share/flythemes.
 EOF
@@ -56,6 +60,69 @@ current_theme() {
 theme_key() {
   # $1 — themerc, $2 — ключ
   sed -n "s/^$2=//p" "$1" | head -1 | sed 's/^"//; s/"$//'
+}
+
+find_x11() {
+  local p
+  p="$(command -v fly-theme-x11 2>/dev/null || true)"
+  if [ -n "$p" ]; then
+    printf '%s\n' "$p"
+    return 0
+  fi
+  p="$(cd "$(dirname "$0")" && pwd)/fly-theme-x11"
+  [ -x "$p" ] && printf '%s\n' "$p"
+}
+
+decor_sig() {
+  # подпись цветов декораций текущей темы
+  local f="$HOME/.fly/theme/current.themerc"
+  printf '%s|%s|%s|%s\n' \
+    "$(theme_key "$f" FrameActiveColor)" \
+    "$(theme_key "$f" FrameColor)" \
+    "$(theme_key "$f" FrameActiveOutlineColor)" \
+    "$(theme_key "$f" FrameOutlineColor)"
+}
+
+save_window_state() {
+  local x
+  x="$(find_x11 || true)"
+  [ -n "$x" ] || return 0
+  STATE_X11="$(mktemp "${TMPDIR:-/tmp}/fly-theme-x11.XXXXXX")"
+  "$x" save "$STATE_X11" >/dev/null 2>&1 || { rm -f "$STATE_X11"; STATE_X11=""; }
+}
+
+restore_window_state() {
+  local x
+  x="$(find_x11 || true)"
+  [ -n "$x" ] || return 0
+  [ -n "${STATE_X11:-}" ] && [ -f "$STATE_X11" ] || return 0
+  # ждём, пока fly-wm поднимется и перечислит окна
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    [ -n "$("$x" active 2>/dev/null)" ] && break
+    sleep 0.5
+  done
+  "$x" restore "$STATE_X11" >/dev/null 2>&1 || true
+  sleep 1
+  "$x" restore "$STATE_X11" >/dev/null 2>&1 || true
+  rm -f "$STATE_X11"
+  STATE_X11=""
+  sleep 0.5
+}
+
+refresh_decorations() {
+  local old_sig="$1" new_sig x
+  new_sig="$(decor_sig)"
+  if [ "$old_sig" = "$new_sig" ]; then
+    return 0
+  fi
+  x="$(find_x11 || true)"
+  [ -n "$x" ] || return 0
+  [ -n "${STATE_X11:-}" ] && [ -f "$STATE_X11" ] || return 0
+  log "decoration colors changed, nudging windows to repaint decoration"
+  "$x" nudge "$STATE_X11" >/dev/null 2>&1 || true
+  rm -f "$STATE_X11"
+  STATE_X11=""
+  sleep 0.3
 }
 
 list_themes() {
@@ -165,11 +232,13 @@ EOF
 }
 
 MODE=apply
+NO_RESTART=0
 case "${1:-}" in
   -h|--help) usage; exit 0 ;;
   --list) list_themes; exit 0 ;;
   --status) current_theme || die "текущая тема не определена"; exit 0 ;;
   --dry-run) MODE=dry; shift ;;
+  --no-restart) NO_RESTART=1; shift ;;
   '') usage >&2; exit 2 ;;
 esac
 
@@ -187,7 +256,13 @@ if [ "$(current_theme || true)" = "$ID" ]; then
   exit 0
 fi
 
+OLD_DECOR="$(decor_sig)"
+save_window_state
+
 if apply_via_select "$ID"; then
+  if [ "$NO_RESTART" = 0 ]; then
+    refresh_decorations "$OLD_DECOR"
+  fi
   log "applied $ID via fly-select-theme"
   echo "Тема применена: $ID"
   exit 0
@@ -195,5 +270,6 @@ fi
 
 echo "fly-select-theme недоступен/не сработал — применяю через перезапуск fly-wm" >&2
 fallback_apply "$ID" "$DIR"
+restore_window_state
 log "applied $ID via fallback"
 echo "Тема применена (fallback): $ID"

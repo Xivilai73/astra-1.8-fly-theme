@@ -2,18 +2,22 @@
 
 Тёмная тема оформления **Fly** для **Astra Linux 1.8** (Special Edition / Common
 Edition, X11) и автоматическая смена темы по времени суток: днём — светлая
-версия этой темы (светлые панель, меню и обои, но те же тёмные рамки окон),
-ночью — тёмная тема.
+версия этой темы (светлые панель, меню и обои), ночью — тёмная тема.
 
-Обе темы используют одинаковое оформление рамок окон (`#262626`, без толстой
-рамки). Это важно: если днём переключаться на штатную светлую тему с голубыми
-рамками, Fly может оставить у верха окна светлую 1 px кромку от прежней темы
-до перезапуска `fly-wm`.
+**Шапка окна окрашена в цвет окна**: днём — белая с тёмным текстом, ночью —
+тёмная (`#262626`) со светлым текстом. Толстая рамка отключена
+(`FrameBorderWidth=0`).
+
+При смене темы Fly не всегда перерисовывает 1 px кромку у верха окна и может
+оставить полоску от прежней темы. Поэтому `fly-theme-apply` после переключения
+«подталкивает» окна на 1 px и обратно — Fly перерисовывает шапку и кромки, окна
+и фокус остаются на месте, перезапуск `fly-wm` не нужен.
 
 Тема повторяет оформление рабочего стола, собранное при настройке Astra:
-заголовок и кромки окон в тон окну (`#262626`), без цветной окантовки; толстая
-рамка отключена (`FrameBorderWidth=0`); тёмный интерфейс (меню, панель задач,
-диалоги), обои `fly-default-red.jpg`.
+тёмная тема — тёмный интерфейс (меню, панель задач, диалоги), шапка и кромки
+окон `#262626`, обои `fly-default-red.jpg`; светлая тема — светлые панель,
+меню и обои, шапка окна белая с тёмным текстом. В обеих темах отключена
+толстая рамка (`FrameBorderWidth=0`) и нет цветной окантовки окон.
 
 ## Скриншоты
 
@@ -24,12 +28,14 @@ Edition, X11) и автоматическая смена темы по врем�
 ## Состав
 
 - тёмная тема Fly `Astra18FlyDark` и светлая `Astra18FlyLight`
-  (Id темы, `index.theme` + `theme/themerc`); у обеих — тёмные (без синих
-  линий) рамки окон;
-- пользовательские цветовые схемы `Astra18FlyDark.colors` и
-  `Astra18FlyLight.colors` (в `[WM]`: заголовок/рамки `38,38,38`);
-- `fly-theme-apply` — применить тему по Id;
+  (Id темы, `index.theme` + `theme/themerc`); в тёмной шапка `#262626`, в
+  светлой — белая с тёмным текстом (в цвет окна);
+- пользовательские цветовые схемы `Astra18FlyDark.colors` (шапка/рамки
+  `38,38,38`) и `Astra18FlyLight.colors` (шапка/рамки `255,255,255`);
+- `fly-theme-apply` — применить тему по Id (с обновлением кромок окон);
 - `fly-theme-switch` — демон автосмены день/ночь и CLI;
+- `fly-theme-x11` — вспомогательные X11/EWMH-операции (активное окно,
+  геометрия, «подталкивание» окон);
 - установка в профиль (`install.sh` / `uninstall.sh`) и сборка `.deb`.
 
 ## Требования
@@ -54,7 +60,8 @@ cd astra-1.8-fly-theme
 1. копирует темы в `~/.local/share/flythemes/Astra18FlyDark` и
    `~/.local/share/flythemes/Astra18FlyLight`;
 2. копирует схемы в `~/.local/share/color-schemes/` (обе);
-3. ставит `~/.local/bin/fly-theme-apply` и `~/.local/bin/fly-theme-switch`;
+3. ставит `fly-theme-apply`, `fly-theme-switch` и `fly-theme-x11`
+   в `~/.local/bin`;
 4. создаёт конфиг `~/.config/fly-theme-switch.conf` (если его ещё нет);
 5. добавляет автозапуск `~/.config/autostart/fly-theme-switch.desktop`;
 6. сохраняет бэкап текущего оформления и применяет тему по текущему времени
@@ -65,28 +72,29 @@ cd astra-1.8-fly-theme
 
 ## Готовый пакет
 
-Собранный пакет и контрольная сумма — в [GitHub Releases](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/tag/v1.0.0):
+Собранный пакет и контрольная сумма — в [GitHub Releases](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/tag/v1.0.1):
 
-- [astra-1.8-fly-theme_1.0.0-1_all.deb](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.0/astra-1.8-fly-theme_1.0.0-1_all.deb)
-- [SHA256SUMS](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.0/SHA256SUMS)
+- [astra-1.8-fly-theme_1.0.1-1_all.deb](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.1/astra-1.8-fly-theme_1.0.1-1_all.deb)
+- [SHA256SUMS](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.1/SHA256SUMS)
 
 ```sh
 sha256sum -c SHA256SUMS
-sudo dpkg -i astra-1.8-fly-theme_1.0.0-1_all.deb
+sudo dpkg -i astra-1.8-fly-theme_1.0.1-1_all.deb
 ```
 
 ## Установка из .deb (системно)
 
 ```sh
 make deb          # или ./build-deb.sh
-sudo dpkg -i dist/astra-1.8-fly-theme_1.0.0-1_all.deb
+sudo dpkg -i dist/astra-1.8-fly-theme_1.0.1-1_all.deb
 sudo apt-get -f install
 ```
 
 Пакет ставит тему в `/usr/share/flythemes`, схему в
 `/usr/share/color-schemes`, скрипты в `/usr/bin`, демон — в
 `/etc/xdg/autostart`. Тему из пакета можно выбрать в
-«Параметры → Оформление → Темы» как «Astra 1.8 Fly Dark».
+«Параметры → Оформление → Темы» как «Astra 1.8 Fly Dark» или
+«Astra 1.8 Fly Light».
 
 > Пакет ставится системно (нужен root), но применяется к пользователю при входе
 > в сеанс — через демон автосмены.
@@ -106,8 +114,8 @@ CHECK_INTERVAL=60
 - `DAY_START..NIGHT_START` — день; если `DAY_START > NIGHT_START`, интервал
   считается переходящим через полночь;
 - `DAY_THEME` / `NIGHT_THEME` — Id тем Fly (см. `fly-theme-apply --list`);
-  можно указать штатную `AstraProximaLight`, но тогда при смене на тёмную тему
-  возможна светлая 1 px кромка у окна до перезапуска `fly-wm`;
+  можно указать и штатную `AstraProximaLight` — `fly-theme-apply` обновит
+  кромки окон после переключения;
 - проверка — раз в `CHECK_INTERVAL` секунд.
 
 Демон запускается автоматически при входе в сеанс (автозапуск `.desktop`).
@@ -136,11 +144,12 @@ fly-theme-apply Astra18FlyLight
 ```
 
 `fly-theme-apply` использует штатную утилиту Fly `fly-select-theme`: цвета,
-панель задач, меню, заголовки окон и обои применяются на лету. Так как обе
-темы используют одинаковые тёмные рамки окон, переключение не оставляет
-светлых «кромок» от прежней темы. Если `fly-select-theme` недоступна,
-используется резервный способ: запись `~/.config/fly-admin-themerc` и
-`~/.fly/paletterc` плюс перезапуск `fly-wm`.
+панель задач, меню, шапка окон и обои применяются на лету. Затем окна
+«подталкиваются» на 1 px и обратно (`fly-theme-x11 nudge`), чтобы Fly
+перерисовал кромку/шапку без перезапуска `fly-wm` — окна и фокус сохраняются.
+Если `fly-select-theme` недоступна, используется резервный способ: запись
+`~/.config/fly-admin-themerc` и `~/.fly/paletterc` плюс перезапуск `fly-wm`
+(с восстановлением активного окна и развёрнутых окон).
 
 ## Как это работает
 
@@ -162,10 +171,10 @@ fly-theme-apply Astra18FlyLight
   `FrameBorderWidth=5` и переключите тему заново.
 - Смена темы через Fly кратковременно перезапускает панель задач/меню
   (несколько секунд); открытые окна не закрываются.
-- Если выбрать днём штатную `AstraProximaLight` (голубые рамки окон), при
-  переключении на тёмную тему Fly может оставить светлую 1 px кромку у верха
-  окна до перезапуска `fly-wm` (`fly-wmfunc FLYWM_RESTART`). Поэтому в
-  комплекте — светлая тема `Astra18FlyLight` с такими же тёмными рамками.
+- При переключении темы напрямую через `fly-select-theme` (не через
+  `fly-theme-apply`) у верха окна может остаться 1 px полоска от прежней темы —
+  используйте `fly-theme-apply <id>` или `fly-theme-switch --apply`, они
+  обновляют кромки.
 - Если нужная тема не установлена, переключение не произойдёт — запись об
   ошибке попадёт в журнал, останется текущая тема.
 - Ручные изменения оформления через «Параметры» будут перезаписаны при
@@ -200,6 +209,7 @@ astra-1.8-fly-theme/
 │   ├── colors/Astra18FlyLight.colors
 │   ├── fly-theme-apply
 │   ├── fly-theme-switch
+│   ├── fly-theme-x11
 │   └── fly-theme-switch.conf
 └── docs/screenshots/
 ```

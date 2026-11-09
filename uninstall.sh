@@ -14,6 +14,7 @@ AUTOSTART_DIR="$CONFIG_HOME/autostart"
 THEMES="Astra18FlyDark Astra18FlyLight"
 CONFIG_FILE="$CONFIG_HOME/fly-theme-switch.conf"
 SWITCH="$BIN_DIR/fly-theme-switch"
+X11="$BIN_DIR/fly-theme-x11"
 PIDFILE="$STATE_HOME/fly-theme-switch/pid"
 APPLY="$BIN_DIR/fly-theme-apply"
 STATE_DIR="$STATE_HOME/fly-theme-switch"
@@ -46,7 +47,7 @@ for theme_id in $THEMES; do
   rm -rf "$DATA_HOME/flythemes/$theme_id"
   rm -f "$DATA_HOME/color-schemes/$theme_id.colors"
 done
-rm -f "$SWITCH" "$APPLY" \
+rm -f "$SWITCH" "$APPLY" "$X11" \
       "$AUTOSTART_DIR/fly-theme-switch.desktop" \
       "$CONFIG_FILE"
 

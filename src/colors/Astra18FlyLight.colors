@@ -140,10 +140,10 @@ shadeSortColumn=true
 contrast=4
 
 [WM]
-activeWindowHeader=38,38,38
-activeWindowFrame=38,38,38
-inactiveWindowHeader=38,38,38
-inactiveWindowFrame=38,38,38
+activeWindowHeader=255,255,255
+activeWindowFrame=255,255,255
+inactiveWindowHeader=255,255,255
+inactiveWindowFrame=255,255,255
 taskbarBackground=255,255,255
 taskbarBackgroundHover=234,234,234
 buttonOutlineHover=0,0,0

@@ -6,8 +6,7 @@ Architecture: all
 Maintainer: Artem Shadaev <249376957+Xivilai73@users.noreply.github.com>
 Depends: fly-admin-theme, bash, python3
 Recommends: picom | compton
-Description: Dark Fly theme and day/night auto-switch for Astra Linux 1.8
- Тёмная тема Fly для Astra Linux 1.8 (без толстой рамки, тёмные кромки окон)
- и автоматическая смена темы по времени суток: днём штатная Astra Proxima
- Светлая, ночью эта тёмная тема. Включает CLI fly-theme-apply и демон
- fly-theme-switch.
+Description: Fly themes and day/night auto-switch for Astra Linux 1.8
+ Тёмная и светлая темы Fly для Astra Linux 1.8 (без толстой рамки, шапка окна
+ в цвет окна) и автоматическая смена темы по времени суток. Включает CLI
+ fly-theme-apply, fly-theme-switch и демон автосмены.

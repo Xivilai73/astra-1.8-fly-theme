@@ -14,6 +14,7 @@ AUTOSTART_DIR="$CONFIG_HOME/autostart"
 THEMES="Astra18FlyDark Astra18FlyLight"
 CONFIG_FILE="$CONFIG_HOME/fly-theme-switch.conf"
 SWITCH="$BIN_DIR/fly-theme-switch"
+X11="$BIN_DIR/fly-theme-x11"
 PIDFILE="$STATE_HOME/fly-theme-switch/pid"
 APPLY="$BIN_DIR/fly-theme-apply"
 BACKUP_DIR="$STATE_HOME/fly-theme-switch/backup"
@@ -68,6 +69,7 @@ done
 # --- скрипты ---
 install -m 755 "$HERE/src/fly-theme-apply" "$APPLY"
 install -m 755 "$HERE/src/fly-theme-switch" "$SWITCH"
+install -m 755 "$HERE/src/fly-theme-x11" "$X11"
 
 # --- конфиг ---
 if [ -f "$CONFIG_FILE" ]; then
@@ -113,7 +115,7 @@ cat <<EOF
 Готово.
   Темы:        $DATA_HOME/flythemes/{Astra18FlyDark,Astra18FlyLight}
   Схемы:       $DATA_HOME/color-schemes/{Astra18FlyDark,Astra18FlyLight}.colors
-  Скрипты:     $APPLY, $SWITCH
+  Скрипты:     $APPLY, $SWITCH, $X11
   Конфиг:      $CONFIG_FILE
   Автозапуск:  $AUTOSTART_DIR/fly-theme-switch.desktop
   Статус:      $SWITCH --status

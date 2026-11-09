@@ -1,0 +1,271 @@
+#!/usr/bin/env python3
+"""fly-theme-x11 — небольшие X11/EWMH-операции для переключения темы Fly.
+
+Подкоманды:
+  active                        id активного окна
+  maximized                     id окон с _NET_WM_STATE_MAXIMIZED_* (по одному в строке)
+  activate <win>                сделать окно активным
+  maximize <win>                развернуть окно (maximized vert+horz)
+  move <win> <x> <y> <w> <h>    переместить/изменить размер (EWMH)
+  save <file>                   сохранить состояние окон (активное, геометрия, maximized)
+  restore <file>                восстановить состояние окон после перезапуска fly-wm
+  nudge <file>                  «толкнуть» окна на 1 px и обратно: заставляет fly-wm
+                                перерисовать кромки/шапку без перезапуска
+"""
+import ctypes
+import struct
+import sys
+
+xlib = ctypes.CDLL("libX11.so.6")
+xlib.XOpenDisplay.restype = ctypes.c_void_p
+xlib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+xlib.XDefaultRootWindow.restype = ctypes.c_ulong
+xlib.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+xlib.XInternAtom.restype = ctypes.c_ulong
+xlib.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+xlib.XGetWindowProperty.restype = ctypes.c_int
+xlib.XGetWindowProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong,
+                                   ctypes.c_long, ctypes.c_long, ctypes.c_int,
+                                   ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong),
+                                   ctypes.POINTER(ctypes.c_int),
+                                   ctypes.POINTER(ctypes.c_ulong),
+                                   ctypes.POINTER(ctypes.c_ulong),
+                                   ctypes.POINTER(ctypes.c_void_p)]
+xlib.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int,
+                            ctypes.c_long, ctypes.c_void_p]
+xlib.XFlush.argtypes = [ctypes.c_void_p]
+xlib.XCloseDisplay.argtypes = [ctypes.c_void_p]
+xlib.XFree.argtypes = [ctypes.c_void_p]
+xlib.XGetWindowAttributes.argtypes = [ctypes.c_void_p, ctypes.c_ulong,
+                                      ctypes.POINTER(ctypes.c_int),
+                                      ctypes.POINTER(ctypes.c_int)]
+xlib.XTranslateCoordinates.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong,
+                                       ctypes.c_int, ctypes.c_int,
+                                       ctypes.POINTER(ctypes.c_int),
+                                       ctypes.POINTER(ctypes.c_int),
+                                       ctypes.POINTER(ctypes.c_ulong)]
+xlib.XGetGeometry.argtypes = [ctypes.c_void_p, ctypes.c_ulong,
+                              ctypes.POINTER(ctypes.c_ulong),
+                              ctypes.POINTER(ctypes.c_int),
+                              ctypes.POINTER(ctypes.c_int),
+                              ctypes.POINTER(ctypes.c_uint),
+                              ctypes.POINTER(ctypes.c_uint),
+                              ctypes.POINTER(ctypes.c_uint),
+                              ctypes.POINTER(ctypes.c_uint)]
+
+DISPLAY = xlib.XOpenDisplay(None)
+if not DISPLAY:
+    sys.exit("cannot open display")
+ROOT = xlib.XDefaultRootWindow(ctypes.c_void_p(DISPLAY))
+
+
+def atom(name):
+    return xlib.XInternAtom(ctypes.c_void_p(DISPLAY), name.encode(), 0)
+
+
+def get_prop(window, name, count=256):
+    a = atom(name)
+    actual_type = ctypes.c_ulong()
+    actual_format = ctypes.c_int()
+    nitems = ctypes.c_ulong()
+    bytes_after = ctypes.c_ulong()
+    prop = ctypes.c_void_p()
+    rc = xlib.XGetWindowProperty(ctypes.c_void_p(DISPLAY), window, a, 0, count,
+                                 False, 0, ctypes.byref(actual_type),
+                                 ctypes.byref(actual_format),
+                                 ctypes.byref(nitems),
+                                 ctypes.byref(bytes_after),
+                                 ctypes.byref(prop))
+    if rc != 0 or not prop:
+        return []
+    try:
+        if actual_format.value == 32:
+            vals = ctypes.cast(prop, ctypes.POINTER(ctypes.c_ulong))
+            return [vals[i] for i in range(nitems.value)]
+        if actual_format.value == 8:
+            return [ctypes.string_at(prop, nitems.value)]
+        return []
+    finally:
+        xlib.XFree(prop)
+
+
+def send_client_message(window, message_type, data):
+    event = ctypes.create_string_buffer(192)
+    struct.pack_into('<i', event, 0, 33)
+    struct.pack_into('<i', event, 16, 1)
+    struct.pack_into('<Q', event, 24, DISPLAY)
+    struct.pack_into('<Q', event, 32, window)
+    struct.pack_into('<Q', event, 40, atom(message_type))
+    struct.pack_into('<i', event, 48, 32)
+    for i, value in enumerate(data):
+        struct.pack_into('<q', event, 56 + 8 * i, int(value))
+    xlib.XSendEvent(ctypes.c_void_p(DISPLAY), ROOT, 0, 0x180000,
+                    ctypes.cast(event, ctypes.c_void_p))
+    xlib.XFlush(ctypes.c_void_p(DISPLAY))
+
+
+def clients():
+    return get_prop(ROOT, "_NET_CLIENT_LIST", 256)
+
+
+def active():
+    vals = get_prop(ROOT, "_NET_ACTIVE_WINDOW")
+    if vals:
+        print(hex(vals[0]))
+
+
+def is_maximized(win):
+    states = set(get_prop(win, "_NET_WM_STATE"))
+    return (atom("_NET_WM_STATE_MAXIMIZED_VERT") in states
+            and atom("_NET_WM_STATE_MAXIMIZED_HORZ") in states)
+
+
+def maximized():
+    for win in clients():
+        if is_maximized(win):
+            print(hex(win))
+
+
+def geometry(win):
+    attrs = ctypes.c_int(0)
+    # XGetWindowAttributes требует указатель на XWindowAttributes; используем
+    # XGetGeometry для размеров и XTranslateCoordinates для абсолютной позиции
+    root_ret = ctypes.c_ulong(0)
+    x = ctypes.c_int(0)
+    y = ctypes.c_int(0)
+    w = ctypes.c_uint(0)
+    h = ctypes.c_uint(0)
+    border = ctypes.c_uint(0)
+    depth = ctypes.c_uint(0)
+    xlib.XGetGeometry(ctypes.c_void_p(DISPLAY), win, ctypes.byref(root_ret),
+                      ctypes.byref(x), ctypes.byref(y),
+                      ctypes.byref(w), ctypes.byref(h),
+                      ctypes.byref(border), ctypes.byref(depth))
+    root_x = ctypes.c_int(0)
+    root_y = ctypes.c_int(0)
+    child = ctypes.c_ulong(0)
+    xlib.XTranslateCoordinates(ctypes.c_void_p(DISPLAY), win, ROOT, 0, 0,
+                               ctypes.byref(root_x), ctypes.byref(root_y),
+                               ctypes.byref(child))
+    return root_x.value, root_y.value, w.value, h.value
+
+
+def activate(win):
+    send_client_message(win, "_NET_ACTIVE_WINDOW", [2, 0, 0, 0, 0])
+
+
+def maximize(win):
+    vert = atom("_NET_WM_STATE_MAXIMIZED_VERT")
+    horz = atom("_NET_WM_STATE_MAXIMIZED_HORZ")
+    send_client_message(win, "_NET_WM_STATE", [1, vert, horz, 2, 0])
+
+
+def move(win, x, y, w, h):
+    gravity = 10  # StaticGravity
+    flags = gravity | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11) | (2 << 12)
+    send_client_message(win, "_NET_MOVERESIZE_WINDOW", [flags, x, y, w, h])
+
+
+def load_state(path):
+    try:
+        lines = [ln.split() for ln in open(path, encoding="utf-8") if ln.strip()]
+    except FileNotFoundError:
+        return [], []
+    act = None
+    entries = []
+    for ln in lines:
+        if ln[0] == "active":
+            act = int(ln[1], 0)
+        elif ln[0] == "client":
+            entries.append((int(ln[1], 0), int(ln[2]), int(ln[3]),
+                            int(ln[4]), int(ln[5]), ln[6] == "1"))
+    return act, entries
+
+
+def nudge_state(path):
+    act, entries = load_state(path)
+    for win, x, y, w, h, _maxed in entries:
+        if w > 2:
+            move(win, x, y, w - 1, h)
+    xlib.XFlush(ctypes.c_void_p(DISPLAY))
+    import time
+    time.sleep(0.15)
+    for win, x, y, w, h, _maxed in entries:
+        move(win, x, y, w, h)
+    for win, x, y, w, h, maxed in entries:
+        if maxed:
+            maximize(win)
+    xlib.XFlush(ctypes.c_void_p(DISPLAY))
+    time.sleep(0.15)
+
+
+def save_state(path):
+    lines = []
+    act = get_prop(ROOT, "_NET_ACTIVE_WINDOW")
+    if act:
+        lines.append("active %d" % act[0])
+    for win in clients():
+        x, y, w, h = geometry(win)
+        lines.append("client %d %d %d %d %d %d" %
+                     (win, x, y, w, h, 1 if is_maximized(win) else 0))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    print("saved %d clients" % (len(lines) - (1 if act else 0)))
+
+
+def restore_state(path):
+    try:
+        lines = [ln.split() for ln in open(path, encoding="utf-8") if ln.strip()]
+    except FileNotFoundError:
+        return
+    act = None
+    for ln in lines:
+        if ln[0] == "active":
+            act = int(ln[1], 0)
+    for ln in lines:
+        if ln[0] != "client":
+            continue
+        win = int(ln[1], 0)
+        x, y, w, h = (int(v) for v in ln[2:6])
+        maxed = ln[6] == "1"
+        move(win, x, y, w, h)
+    for ln in lines:
+        if ln[0] != "client":
+            continue
+        win = int(ln[1], 0)
+        if ln[6] == "1":
+            maximize(win)
+    if act:
+        activate(act)
+
+
+def main(argv):
+    if not argv:
+        print(__doc__)
+        return 2
+    cmd = argv[0]
+    if cmd == "active":
+        active()
+    elif cmd == "maximized":
+        maximized()
+    elif cmd == "activate" and len(argv) == 2:
+        activate(int(argv[1], 0))
+    elif cmd == "maximize" and len(argv) == 2:
+        maximize(int(argv[1], 0))
+    elif cmd == "move" and len(argv) == 6:
+        move(int(argv[1], 0), *[int(v) for v in argv[2:6]])
+    elif cmd == "save" and len(argv) == 2:
+        save_state(argv[1])
+    elif cmd == "restore" and len(argv) == 2:
+        restore_state(argv[1])
+    elif cmd == "nudge" and len(argv) == 2:
+        nudge_state(argv[1])
+    else:
+        print(__doc__)
+        return 2
+    xlib.XCloseDisplay(ctypes.c_void_p(DISPLAY))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
