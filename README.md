@@ -72,21 +72,21 @@ cd astra-1.8-fly-theme
 
 ## Готовый пакет
 
-Собранный пакет и контрольная сумма — в [GitHub Releases](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/tag/v1.0.1):
+Собранный пакет и контрольная сумма — в [GitHub Releases](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/tag/v1.0.2):
 
-- [astra-1.8-fly-theme_1.0.1-1_all.deb](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.1/astra-1.8-fly-theme_1.0.1-1_all.deb)
-- [SHA256SUMS](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.1/SHA256SUMS)
+- [astra-1.8-fly-theme_1.0.2-1_all.deb](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.2/astra-1.8-fly-theme_1.0.2-1_all.deb)
+- [SHA256SUMS](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.2/SHA256SUMS)
 
 ```sh
 sha256sum -c SHA256SUMS
-sudo dpkg -i astra-1.8-fly-theme_1.0.1-1_all.deb
+sudo dpkg -i astra-1.8-fly-theme_1.0.2-1_all.deb
 ```
 
 ## Установка из .deb (системно)
 
 ```sh
 make deb          # или ./build-deb.sh
-sudo dpkg -i dist/astra-1.8-fly-theme_1.0.1-1_all.deb
+sudo dpkg -i dist/astra-1.8-fly-theme_1.0.2-1_all.deb
 sudo apt-get -f install
 ```
 
@@ -105,7 +105,7 @@ sudo apt-get -f install
 
 ```ini
 DAY_START=08:00
-NIGHT_START=20:00
+NIGHT_START=18:00
 DAY_THEME=Astra18FlyLight
 NIGHT_THEME=Astra18FlyDark
 CHECK_INTERVAL=60

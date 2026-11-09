@@ -4,7 +4,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG="astra-1.8-fly-theme"
-VER="1.0.1-1"
+VER="1.0.2-1"
 ARCH="all"
 THEMES="Astra18FlyDark Astra18FlyLight"
 OUT="$HERE/dist"
