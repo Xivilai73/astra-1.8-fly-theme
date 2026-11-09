@@ -63,6 +63,18 @@ cd astra-1.8-fly-theme
 Скрипт идемпотентен: повторный запуск обновляет файлы темы/скриптов, не
 перезаписывая конфиг и бэкап.
 
+## Готовый пакет
+
+Собранный пакет и контрольная сумма — в [GitHub Releases](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/tag/v1.0.0):
+
+- [astra-1.8-fly-theme_1.0.0-1_all.deb](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.0/astra-1.8-fly-theme_1.0.0-1_all.deb)
+- [SHA256SUMS](https://github.com/Xivilai73/astra-1.8-fly-theme/releases/download/v1.0.0/SHA256SUMS)
+
+```sh
+sha256sum -c SHA256SUMS
+sudo dpkg -i astra-1.8-fly-theme_1.0.0-1_all.deb
+```
+
 ## Установка из .deb (системно)
 
 ```sh
